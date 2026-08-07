@@ -37,7 +37,7 @@ node server/server.js
 - Open the app in your browser.
 - Choose an image file.
 - Click `Describe this image`.
-- The app sends the image to the backend proxy and displays the returned description.
+- The app sends the image to the backend proxy and displays the returned description and tags.
 
 ## Notes
 
