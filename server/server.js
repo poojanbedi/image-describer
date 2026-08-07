@@ -5,6 +5,7 @@ import { env } from "node:process";
 
 const PORT = env.PORT ? Number(env.PORT) : 5175;
 const OPENAI_KEY = env.OPENAI_API_KEY;
+const IS_DEBUG_MODE = env.DEBUG === "true" || env.DEBUG === "1";
 
 if (!OPENAI_KEY) {
   console.warn("Warning: OPENAI_API_KEY is not set. The server will start, but image descriptions will fail until the key is provided.");
@@ -42,7 +43,10 @@ const server = createServer((req, res) => {
               {
                 role: "user",
                 content: [
-                  { type: "input_text", text: "Describe this image in detail." },
+                  {
+                    type: "input_text",
+                    text: "Describe this image in detail and then provide a short comma-separated list of tags for the image.",
+                  },
                   { type: "input_image", image_url: image },
                 ],
               },
@@ -52,12 +56,31 @@ const server = createServer((req, res) => {
 
         const data = await resp.json();
 
+        if(IS_DEBUG_MODE)
+            console.log("OpenAI response:", JSON.stringify(data, null, 2));
+
+        const content = data.output?.[0]?.content ?? [];
         const description =
-          data.output?.[0]?.content?.find((item) => item.type === "output_text")?.text ||
-          (data.output?.[0]?.content?.map((c) => c.text || "").join("\n") || "No description returned.");
+          content.find((item) => item.type === "output_text")?.text ||
+          content.map((c) => c.text || "").join("\n") ||
+          "No description returned.";
+
+        const tagText =
+          content
+            .map((item) => item.type === "output_text" ? item.text : undefined)
+            .filter(Boolean)
+            .join("\n")
+            .split(/tags?:\s*/i)
+            .slice(1)
+            .join("\n") || "";
+
+        const tags = tagText
+          .split(/,|\n/)
+          .map((tag) => tag.trim())
+          .filter(Boolean);
 
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ description }));
+        res.end(JSON.stringify({ description, tags }));
       } catch (err) {
         console.error("Describe request failed:", err);
         res.writeHead(500, { "Content-Type": "application/json" });

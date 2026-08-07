@@ -107,8 +107,8 @@ button:hover:not(:disabled) {
 }
 
 .copy-button {
-  width: 40px;
-  height: 40px;
+  width: auto;
+  padding: 10px 16px;
   border-radius: 12px;
   background: #2563eb;
   color: white;
@@ -117,9 +117,29 @@ button:hover:not(:disabled) {
   justify-content: center;
 }
 
-.copy-button svg {
-  width: 18px;
-  height: 18px;
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.95rem;
 }
 
 .toast {

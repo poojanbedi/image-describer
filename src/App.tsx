@@ -1,7 +1,12 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
+import AppShell from "./components/AppShell";
+import DescriptionCard from "./components/DescriptionCard";
+import ImageUploadForm from "./components/ImageUploadForm";
+import ToastMessage from "./components/ToastMessage";
 
 interface DescribeResponse {
   description: string;
+  tags: string[];
 }
 
 function App() {
@@ -9,6 +14,7 @@ function App() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [description, setDescription] = useState<string>("");
+  const [tags, setTags] = useState<string[]>([]);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -31,6 +37,7 @@ function App() {
       setImageFile(null);
       setPreviewUrl(null);
       setImageDataUrl(null);
+      setTags([]);
       return;
     }
 
@@ -75,6 +82,7 @@ function App() {
     event.preventDefault();
     setError(null);
     setDescription("");
+    setTags([]);
     setCopyStatus(null);
 
     if (!imageFile) {
@@ -104,6 +112,7 @@ function App() {
       }
 
       setDescription(result.description);
+      setTags(result.tags ?? []);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Unexpected error.");
     } finally {
@@ -112,45 +121,13 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
-      <header>
-        <h1>Image Describer</h1>
-        <p>Upload an image and receive a detailed full-format description.</p>
-      </header>
+    <AppShell>
+      <ImageUploadForm previewUrl={previewUrl} loading={loading} onFileChange={handleFileChange} onSubmit={handleSubmit} />
 
-      <main>
-        <form className="upload-form" onSubmit={handleSubmit}>
-          <label className="file-label">
-            <span>Select image</span>
-            <input type="file" accept="image/*" onChange={handleFileChange} />
-          </label>
-
-          {previewUrl && (
-            <div className="preview">
-              <img src={previewUrl} alt="Selected preview" />
-            </div>
-          )}
-
-          <button type="submit" disabled={loading}>
-            {loading ? "Describing..." : "Describe this image"}
-          </button>
-        </form>
-
-        {error && <div className="message message-error">{error}</div>}
-        {description && (
-          <div className="message message-success description-card">
-            <div className="description-header">
-              <strong>Description</strong>
-              <button type="button" className="copy-button" onClick={handleCopyDescription}>
-                Copy
-              </button>
-            </div>
-            <pre>{description}</pre>
-          </div>
-        )}
-        {copyStatus && <div className="toast">{copyStatus}</div>}
-      </main>
-    </div>
+      {error && <div className="message message-error">{error}</div>}
+      {description && <DescriptionCard description={description} tags={tags} onCopy={handleCopyDescription} />}
+      {copyStatus && <ToastMessage message={copyStatus} />}
+    </AppShell>
   );
 }
 
