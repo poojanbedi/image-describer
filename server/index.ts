@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import OpenAI from "openai";
+import { error, log } from "./logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,7 +17,7 @@ const upload = multer({ dest: path.resolve(__dirname, "../.tmp") });
 const port = process.env.PORT ? Number(process.env.PORT) : 5175;
 
 if (!process.env.OPENAI_API_KEY) {
-  console.error("Missing OPENAI_API_KEY in environment.");
+  error("Missing OPENAI_API_KEY in environment.");
   process.exit(1);
 }
 
@@ -52,12 +53,12 @@ app.post("/api/describe", upload.single("image"), async (req, res) => {
 
     const description = response.output?.[0]?.content?.find((item: any) => item.type === "output_text")?.text || "No description returned.";
     res.json({ description });
-  } catch (error) {
-    console.error("Describe request failed:", error);
+  } catch (err) {
+    error("Describe request failed:", err);
     res.status(500).json({ error: "Failed to describe image." });
   }
 });
 
 app.listen(port, () => {
-  console.log(`Server listening on http://localhost:${port}`);
+  log(`Server listening on http://localhost:${port}`);
 });

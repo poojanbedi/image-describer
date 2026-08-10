@@ -1,6 +1,7 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import AppShell from "./components/AppShell";
 import DescriptionCard from "./components/DescriptionCard";
+import FlickrAuthPanel from "./components/FlickrAuthPanel";
 import ImageUploadForm from "./components/ImageUploadForm";
 import ToastMessage from "./components/ToastMessage";
 
@@ -18,6 +19,13 @@ function App() {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [flickrSid, setFlickrSid] = useState<string | null>(null);
+  const [flickrAuthenticated, setFlickrAuthenticated] = useState(false);
+  const [flickrAuthLoading, setFlickrAuthLoading] = useState(false);
+  const [flickrAuthError, setFlickrAuthError] = useState<string | null>(null);
+  const [flickrSaveLoading, setFlickrSaveLoading] = useState(false);
+  const [flickrSaveResult, setFlickrSaveResult] = useState<string | null>(null);
+  const [flickrVisibility, setFlickrVisibility] = useState<"public" | "private">("public");
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -63,6 +71,34 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    const storedSid = window.localStorage.getItem("flickrSid");
+    if (storedSid) {
+      setFlickrSid(storedSid);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!flickrSid) {
+      setFlickrAuthenticated(false);
+      return;
+    }
+
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`/api/flickr/status?sid=${encodeURIComponent(flickrSid)}`);
+        const data = await response.json();
+        if (response.ok) {
+          setFlickrAuthenticated(Boolean((data as any)?.authenticated));
+        }
+      } catch {
+        setFlickrAuthenticated(false);
+      }
+    };
+
+    checkStatus();
+  }, [flickrSid]);
+
   const handleCopyDescription = async () => {
     if (!description) {
       return;
@@ -76,6 +112,103 @@ function App() {
       setCopyStatus("Copy failed. Try again.");
       window.setTimeout(() => setCopyStatus(null), 2000);
     }
+  };
+
+  const startFlickrAuth = async () => {
+    setFlickrAuthError(null);
+    setFlickrAuthLoading(true);
+    setFlickrSaveResult(null);
+
+    try {
+      const response = await fetch("/api/flickr/start");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as any)?.error ?? "Failed to start Flickr auth.");
+      }
+
+      const { authorizeUrl, sid } = data as { authorizeUrl: string; sid: string };
+      window.localStorage.setItem("flickrSid", sid);
+      setFlickrSid(sid);
+      window.open(authorizeUrl, "_blank", "noopener,noreferrer");
+    } catch (fetchError) {
+      setFlickrAuthError(fetchError instanceof Error ? fetchError.message : "Unable to start Flickr auth.");
+    } finally {
+      setFlickrAuthLoading(false);
+    }
+  };
+
+  const checkFlickrAuth = async () => {
+    if (!flickrSid) {
+      setFlickrAuthError("No Flickr session found. Connect first.");
+      return;
+    }
+
+    setFlickrAuthError(null);
+    setFlickrAuthLoading(true);
+
+    try {
+      const response = await fetch(`/api/flickr/status?sid=${encodeURIComponent(flickrSid)}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as any)?.error ?? "Failed to check Flickr auth.");
+      }
+
+      setFlickrAuthenticated(Boolean((data as any)?.authenticated));
+    } catch (fetchError) {
+      setFlickrAuthError(fetchError instanceof Error ? fetchError.message : "Unable to check Flickr auth.");
+    } finally {
+      setFlickrAuthLoading(false);
+    }
+  };
+
+  const saveToFlickr = async () => {
+    setFlickrSaveResult(null);
+    setFlickrAuthError(null);
+
+    if (!flickrSid) {
+      setFlickrAuthError("No Flickr session found. Connect first.");
+      return;
+    }
+
+    if (!description || !imageDataUrl) {
+      setFlickrSaveResult("No description or image available to save.");
+      return;
+    }
+
+    setFlickrSaveLoading(true);
+
+    try {
+      const response = await fetch("/api/save-to-flickr", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: imageDataUrl,
+          description,
+          tags,
+          visibility: flickrVisibility,
+          sid: flickrSid,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as any)?.error ?? "Failed to save image to Flickr.");
+      }
+
+      setFlickrSaveResult("Saved to Flickr successfully.");
+    } catch (fetchError) {
+      setFlickrSaveResult(fetchError instanceof Error ? fetchError.message : "Unable to save to Flickr.");
+    } finally {
+      setFlickrSaveLoading(false);
+    }
+  };
+
+  const handleVisibilityChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setFlickrVisibility(event.target.value === "private" ? "private" : "public");
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -125,7 +258,24 @@ function App() {
       <ImageUploadForm previewUrl={previewUrl} loading={loading} onFileChange={handleFileChange} onSubmit={handleSubmit} />
 
       {error && <div className="message message-error">{error}</div>}
-      {description && <DescriptionCard description={description} tags={tags} onCopy={handleCopyDescription} />}
+      {description && (
+        <>
+          <DescriptionCard description={description} tags={tags} onCopy={handleCopyDescription} />
+          <FlickrAuthPanel
+            flickrSid={flickrSid}
+            authenticated={flickrAuthenticated}
+            authLoading={flickrAuthLoading}
+            authError={flickrAuthError}
+            saveLoading={flickrSaveLoading}
+            saveResult={flickrSaveResult}
+            visibility={flickrVisibility}
+            onConnect={startFlickrAuth}
+            onCheckAuth={checkFlickrAuth}
+            onSave={saveToFlickr}
+            onVisibilityChange={handleVisibilityChange}
+          />
+        </>
+      )}
       {copyStatus && <ToastMessage message={copyStatus} />}
     </AppShell>
   );

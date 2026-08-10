@@ -1,98 +1,62 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { env } from "node:process";
-
+import { log } from "./logger.js";
+import { handleDescribe } from "./server_modules/openai.js";
+import { handleStart, handleCallback, handleSave, createFlickrAuthSession, getFlickrAuthStatus } from "./server_modules/flickr.js";
 
 const PORT = env.PORT ? Number(env.PORT) : 5175;
 const OPENAI_KEY = env.OPENAI_API_KEY;
 const IS_DEBUG_MODE = env.DEBUG === "true" || env.DEBUG === "1";
 
-if (!OPENAI_KEY) {
-  console.warn("Warning: OPENAI_API_KEY is not set. The server will start, but image descriptions will fail until the key is provided.");
-}
-
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/api/describe") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", async () => {
-      try {
-        const payload = JSON.parse(body || "{}");
-        const image = payload.image;
-        if (!image) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "image is required" }));
-          return;
-        }
-
-        if (!OPENAI_KEY) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "OPENAI_API_KEY is not configured." }));
-          return;
-        }
-
-        const resp = await fetch("https://api.openai.com/v1/responses", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${OPENAI_KEY}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-4.1-mini",
-            input: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "input_text",
-                    text: "Describe this image in detail and then provide a short comma-separated list of tags for the image.",
-                  },
-                  { type: "input_image", image_url: image },
-                ],
-              },
-            ],
-          }),
-        });
-
-        const data = await resp.json();
-
-        if(IS_DEBUG_MODE)
-            console.log("OpenAI response:", JSON.stringify(data, null, 2));
-
-        const content = data.output?.[0]?.content ?? [];
-        const description =
-          content.find((item) => item.type === "output_text")?.text ||
-          content.map((c) => c.text || "").join("\n") ||
-          "No description returned.";
-
-        const tagText =
-          content
-            .map((item) => item.type === "output_text" ? item.text : undefined)
-            .filter(Boolean)
-            .join("\n")
-            .split(/tags?:\s*/i)
-            .slice(1)
-            .join("\n") || "";
-
-        const tags = tagText
-          .split(/,|\n/)
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ description, tags }));
-      } catch (err) {
-        console.error("Describe request failed:", err);
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Failed to describe image." }));
-      }
-    });
-  } else {
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("Not Found");
+    return handleDescribe(req, res, OPENAI_KEY, IS_DEBUG_MODE);
   }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/api/flickr/start")) {
+    try {
+      const { authorizeUrl, sid } = await createFlickrAuthSession(PORT, IS_DEBUG_MODE);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ authorizeUrl, sid }));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : "Failed to start Flickr auth." }));
+    }
+    return;
+  }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/api/flickr/status")) {
+    const url = new URL(req.url, "http://localhost");
+    const sid = url.searchParams.get("sid") || "";
+    if (!sid) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "sid is required" }));
+      return;
+    }
+
+    const status = getFlickrAuthStatus(sid);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(status));
+    return;
+  }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/auth/flickr/start")) {
+    return handleStart(req, res, PORT, IS_DEBUG_MODE);
+  }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/auth/flickr/callback")) {
+    return handleCallback(req, res, PORT, IS_DEBUG_MODE);
+  }
+
+  if (req.method === "POST" && req.url === "/api/save-to-flickr") {
+    return handleSave(req, res);
+  }
+
+  res.writeHead(404, { "Content-Type": "text/plain" });
+  res.end("Not Found");
 });
 
 server.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
+  log(`Server listening on http://localhost:${PORT}`);
 });
