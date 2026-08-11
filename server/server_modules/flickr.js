@@ -234,7 +234,7 @@ export async function handleCallback(req, res, PORT, IS_DEBUG_MODE) {
   }
 }
 
-export async function handleSave(req, res) {
+export async function handleSave(req, res, IS_DEBUG_MODE) {
   try {
     const FLICKR_KEY = process.env.FLICKR_API_KEY;
     const FLICKR_SECRET = process.env.FLICKR_API_SECRET;
@@ -250,6 +250,11 @@ export async function handleSave(req, res) {
 
     const payload = JSON.parse(body || "{}");
     const { image, description, tags, visibility, sid } = payload;
+
+    if(IS_DEBUG_MODE) {
+      debug("Save to Flickr Payload:", payload);
+    }
+
     if (!image) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "image is required" }));
@@ -348,8 +353,23 @@ export async function handleSave(req, res) {
     });
 
     const text = await resp.text();
-    res.writeHead(200, { "Content-Type": "application/xml" });
-    res.end(text);
+
+    if (IS_DEBUG_MODE) {
+      debug("Flickr upload response status:", resp.status);
+      debug("Flickr upload response text:", text);
+    }
+
+    const uploadErrorMatch = text.match(/<err[^>]*code="([^"]+)"[^>]*msg="([^"]+)"/i);
+    if (!resp.ok || uploadErrorMatch) {
+      const message = uploadErrorMatch ? uploadErrorMatch[2] : `Flickr upload failed with status ${resp.status}`;
+      res.writeHead(resp.ok ? 500 : resp.status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: message }));
+      return;
+    }
+
+    const photoIdMatch = text.match(/<photoid[^>]*>([^<]+)<\/photoid>/i);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: true, photoId: photoIdMatch ? photoIdMatch[1] : null }));
   } catch (err) {
     error("Save to Flickr failed:", err);
     res.writeHead(500, { "Content-Type": "application/json" });

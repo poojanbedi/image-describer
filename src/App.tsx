@@ -193,10 +193,21 @@ function App() {
           sid: flickrSid,
         }),
       });
-      const data = await response.json();
+
+      const text = await response.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: text };
+      }
 
       if (!response.ok) {
         throw new Error((data as any)?.error ?? "Failed to save image to Flickr.");
+      }
+
+      if ((data as any)?.error) {
+        throw new Error((data as any).error);
       }
 
       setFlickrSaveResult("Saved to Flickr successfully.");

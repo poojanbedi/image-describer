@@ -50,7 +50,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && req.url === "/api/save-to-flickr") {
-    return handleSave(req, res);
+    return handleSave(req, res, IS_DEBUG_MODE);
   }
 
   res.writeHead(404, { "Content-Type": "text/plain" });

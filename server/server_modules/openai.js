@@ -34,7 +34,8 @@ export async function handleDescribe(req, res, OPENAI_KEY, IS_DEBUG_MODE) {
               content: [
                 {
                   type: "input_text",
-                  text: "Describe this image in detail. Then output only a JSON object with keys description and tags. Tags should be a short array of lowercase labels describing the scene. Do not include any explanation outside the JSON object.",
+                  // text: "Describe this image in detail. Then output only a JSON object with keys description and tags. Tags should be a short array of lowercase labels describing the scene. Do not include any explanation outside the JSON object.",
+                  text: "Describe this image in a creative way for social media post. Then output only a JSON object with keys description and tags. Tags should be a short array of lowercase labels describing the scene. Do not include any explanation outside the JSON object.",
                 },
                 { type: "input_image", image_url: image },
               ],
