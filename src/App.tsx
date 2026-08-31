@@ -26,6 +26,11 @@ function App() {
   const [flickrSaveLoading, setFlickrSaveLoading] = useState(false);
   const [flickrSaveResult, setFlickrSaveResult] = useState<string | null>(null);
   const [flickrVisibility, setFlickrVisibility] = useState<"public" | "private">("public");
+  const [publishTarget, setPublishTarget] = useState<"flickr" | "instagram">("flickr");
+  const [instagramFormat, setInstagramFormat] = useState<"portrait" | "square" | "landscape">("portrait");
+  const [instagramConnected, setInstagramConnected] = useState(false);
+  const [instagramAuthLoading, setInstagramAuthLoading] = useState(false);
+  const [instagramAuthError, setInstagramAuthError] = useState<string | null>(null);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -163,17 +168,77 @@ function App() {
     }
   };
 
+  const startInstagramAuth = async () => {
+    setInstagramAuthError(null);
+    setInstagramAuthLoading(true);
+    setFlickrSaveResult(null);
+
+    try {
+      const response = await fetch("/api/instagram/start");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as any)?.error ?? "Failed to start Instagram auth.");
+      }
+
+      const { authUrl } = data as { authUrl: string };
+      setInstagramConnected(true);
+      window.open(authUrl, "_blank", "noopener,noreferrer");
+    } catch (fetchError) {
+      setInstagramAuthError(fetchError instanceof Error ? fetchError.message : "Unable to start Instagram auth.");
+    } finally {
+      setInstagramAuthLoading(false);
+    }
+  };
+
   const saveToFlickr = async () => {
     setFlickrSaveResult(null);
     setFlickrAuthError(null);
-
-    if (!flickrSid) {
-      setFlickrAuthError("No Flickr session found. Connect first.");
-      return;
-    }
+    setInstagramAuthError(null);
 
     if (!description || !imageDataUrl) {
       setFlickrSaveResult("No description or image available to save.");
+      return;
+    }
+
+    if (publishTarget === "instagram") {
+      if (!instagramConnected) {
+        setInstagramAuthError("Connect Instagram before publishing.");
+        return;
+      }
+
+      setFlickrSaveLoading(true);
+      try {
+        const response = await fetch("/api/publish-to-instagram", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            image: imageDataUrl,
+            description,
+            tags,
+            format: instagramFormat,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error((data as any)?.error ?? "Failed to publish to Instagram.");
+        }
+
+        setFlickrSaveResult(`Instagram ready: ${data.format} format (${data.width}x${data.height})`);
+      } catch (fetchError) {
+        setFlickrSaveResult(fetchError instanceof Error ? fetchError.message : "Unable to publish to Instagram.");
+      } finally {
+        setFlickrSaveLoading(false);
+      }
+      return;
+    }
+
+    if (!flickrSid) {
+      setFlickrAuthError("No Flickr session found. Connect first.");
       return;
     }
 
@@ -220,6 +285,15 @@ function App() {
 
   const handleVisibilityChange = (event: ChangeEvent<HTMLSelectElement>) => {
     setFlickrVisibility(event.target.value === "private" ? "private" : "public");
+  };
+
+  const handlePublishTargetChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setPublishTarget(event.target.value === "instagram" ? "instagram" : "flickr");
+  };
+
+  const handleInstagramFormatChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = event.target.value as "portrait" | "square" | "landscape";
+    setInstagramFormat(nextValue);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -276,14 +350,22 @@ function App() {
             flickrSid={flickrSid}
             authenticated={flickrAuthenticated}
             authLoading={flickrAuthLoading}
-            authError={flickrAuthError}
-            saveLoading={flickrSaveLoading}
+            authError={flickrAuthError || instagramAuthError}
+            saveLoading={flickrSaveLoading || instagramAuthLoading}
             saveResult={flickrSaveResult}
             visibility={flickrVisibility}
+            publishTarget={publishTarget}
+            instagramFormat={instagramFormat}
+            instagramConnected={instagramConnected}
+            instagramAuthLoading={instagramAuthLoading}
+            instagramAuthError={instagramAuthError}
             onConnect={startFlickrAuth}
             onCheckAuth={checkFlickrAuth}
             onSave={saveToFlickr}
             onVisibilityChange={handleVisibilityChange}
+            onPublishTargetChange={handlePublishTargetChange}
+            onInstagramFormatChange={handleInstagramFormatChange}
+            onConnectInstagram={startInstagramAuth}
           />
         </>
       )}
