@@ -4,6 +4,7 @@ import { env } from "node:process";
 import { log } from "./logger.js";
 import { handleDescribe } from "./server_modules/openai.js";
 import { handleStart, handleCallback, handleSave, createFlickrAuthSession, getFlickrAuthStatus } from "./server_modules/flickr.js";
+import { handleInstagramAuthStart, handleInstagramAuthCallback, handleInstagramPublish, getInstagramAuthStatus } from "./server_modules/instagram.js";
 
 const PORT = env.PORT ? Number(env.PORT) : 5175;
 const OPENAI_KEY = env.OPENAI_API_KEY;
@@ -49,8 +50,29 @@ const server = createServer(async (req, res) => {
     return handleCallback(req, res, PORT, IS_DEBUG_MODE);
   }
 
+  if (req.method === "GET" && req.url && req.url.startsWith("/api/instagram/start")) {
+    return handleInstagramAuthStart(req, res, PORT, IS_DEBUG_MODE);
+  }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/api/instagram/status")) {
+    const url = new URL(req.url, "http://localhost");
+    const sid = url.searchParams.get("sid") || "";
+    const status = getInstagramAuthStatus(sid);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(status));
+    return;
+  }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/auth/instagram/callback")) {
+    return handleInstagramAuthCallback(req, res, PORT, IS_DEBUG_MODE);
+  }
+
   if (req.method === "POST" && req.url === "/api/save-to-flickr") {
     return handleSave(req, res, IS_DEBUG_MODE);
+  }
+
+  if (req.method === "POST" && req.url === "/api/publish-to-instagram") {
+    return handleInstagramPublish(req, res, IS_DEBUG_MODE);
   }
 
   res.writeHead(404, { "Content-Type": "text/plain" });
